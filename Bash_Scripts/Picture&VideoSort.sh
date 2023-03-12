@@ -2,16 +2,16 @@
 
 picture_sort(){
 	all_files=$(find . -type f -iname "*$1")
-	lines=`find . -type f -iname "*$1" | wc -l`
+	lines=`find . -type f -iname "*$1" | wc -l` 
 	
 	if [ $lines != 0 ]; then # Checks if $all_files is empty.
 		for ((i = 1; $lines >= i; i++)); do
-			file=`echo $all_files | cut -d' ' -f$i`
+			file=`echo "$all_files" | sed -n "${i}p"`
 			checksum=`sha256sum "$file" | cut -d' ' -f1` # Compares checksum to a list and adds it to the list if a checksum is not found.
 			if grep $checksum /media/flip/8TB\ HDD/Other/Pictures\&Videos/sha256sum.txt; then
 				echo "File already exists."
 				exiftool -d ../Trash/%Y-%m-%d_%H-%M-%S%%-c$1 '-filename<CreateDate' "$file"
-				mv --backup $file ../Trash/
+				mv --backup "$file" ../Trash/
 			else
 				if [ $2 == ".png" ]; then
 					optipng -o7 "$file"
@@ -35,12 +35,12 @@ video_sort(){
 	
 	if [ $lines != 0 ]; then # Checks if $all_files is empty.
 		for ((i = 1; $lines >= i; i++)); do
-			file=`echo $all_files | cut -d' ' -f$i`
+			file=`echo "$all_files" | sed -n "${i}p"`
 			checksum=`sha256sum "$file" | cut -d' ' -f1` # Compares checksum to a list and adds it to the list if a checksum is not found.
 			if grep $checksum /media/flip/8TB\ HDD/Other/Pictures\&Videos/sha256sum.txt; then
 				echo "File already exists."
 				exiftool -d ../Trash/%Y-%m-%d_%H-%M-%S%%-c$1 '-filename<CreateDate' "$file"
-				mv --backup $file ../Trash/
+				mv --backup "$file" ../Trash/
 			else
 				echo $checksum >> /media/flip/8TB\ HDD/Other/Pictures\&Videos/sha256sum.txt
 				exiftool -d /media/flip/"8TB HDD/Other/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c$1" '-filename<CreateDate' "$file"
