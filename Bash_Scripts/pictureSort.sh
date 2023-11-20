@@ -1,5 +1,6 @@
 #!/bin/bash
 # This script will recursively search for images/videos losslessly compress, rename and organize them.
+# TODO: Fix mv overwriting destination files.
 
 {
 while getopts "i:o:" arg; do
@@ -16,216 +17,77 @@ outpath="${outpath:-.}"
 
 cd "$inpath"
 
-
+mkdir -p $outpath/Pictures\&Videos/Family\ Pictures/Unknown\ Date
+mkdir -p $outpath/Pictures\&Videos/Family\ Videos/Unknown\ Date
+mkdir -p ../Trash/Duplicates/
+mkdir -p ../Trash/Small/
 
 while true; do
 	# Recursively lists all files and puts them into "files" array.
 	files=()
 	mapfile -d $'\0' files < <(find . -print0)
 
-	mkdir -p $outpath/Pictures\&Videos/Family\ Pictures/Unknown\ Date
-	mkdir -p $outpath/Pictures\&Videos/Family\ Videos/Unknown\ Date
-	mkdir -p ../Trash/Duplicates/
-	mkdir -p ../Trash/Small/
-
-	for ((i = 0; ${#files[@]} > i; i++)); do
-		
-		jpeg=false
-		png=false
-		heic=false
-		mp4=false
-		xmsasf=false
-		xmsvideo=false
-		quicktime=false
-		xmatroska=false
-		GP3=false
-		
-		# Checks for file type.
-		if file -i "${files[i]}" | grep "image/jpeg" && [[ "${files[i]}" != *.syncthing.* ]]; then
-			jpeg=true
-		fi
-		if file -i "${files[i]}" | grep "image/png"; then
-			png=true
-		fi
-		if file -i "${files[i]}" | grep "image/heic"; then
-			heic=true
-		fi
-		if file -i "${files[i]}" | grep "video/mp4"; then
-			mp4=true
-		fi
-		if file -i "${files[i]}" | grep "video/x-ms-asf"; then
-			xmsasf=true
-		fi
-		if file -i "${files[i]}" | grep "video/x-msvideo"; then
-			xmsvideo=true
-		fi
-		if file -i "${files[i]}" | grep "video/quicktime"; then
-			quicktime=true
-		fi
-		if file -i "${files[i]}" | grep "video/x-matroska"; then
-			xmatroska=true
-		fi
-		if file -i "${files[i]}" | grep "video/3gpp"; then
-			GP3=true
-		fi
-		
-		# Pictures
-		if [ "$jpeg" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
-				mv "${files[i]}" ../Trash/Small/
-			else
-				jpegoptim -t "${files[i]}"
-				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
-					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.jpg" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" ../Trash/Duplicates/
-				else
-					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Pictures/%Y/%Y-%m-%d_%H-%M-%S%%-c.jpg" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Pictures/Unknown Date"
-				fi
-			fi
-		fi
-		
-		if [ "$png" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
-				mv "${files[i]}" ../Trash/Small/
-			else
-				optipng -o7 "${files[i]}"
-				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
-					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.png" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" ../Trash/Duplicates/
-				else
-					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Pictures/%Y/%Y-%m-%d_%H-%M-%S%%-c.png" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Pictures/Unknown Date"
-				fi
-			fi
-		fi
-		
-		if [ "$heic" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
+	for ((i = 0; ${#files[@]} > i; i++)); do # Iterates through all files found.
+		if file --mime-type -b "${files[i]}" | grep -q "image/" || file --mime-type -b "${files[i]}" | grep -q "video/" && [[ "${files[i]}" != *.syncthing.* ]]; then # Files that have "image/" or "video/" as a MIME type and not ".syncthing." in the name.
+			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then # Moves files less than 20KB to "../Trash/Small/".
+				echo "Warning: File smaller than 20KB"
 				mv "${files[i]}" ../Trash/Small/
 			else
 				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
+				if grep -q $checksum sha256sum.txt; then
 					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.heic" '-filename<CreateDate' "${files[i]}"
 					mv "${files[i]}" ../Trash/Duplicates/
 				else
 					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Pictures/%Y/%Y-%m-%d_%H-%M-%S%%-c.heic" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Pictures/Unknown Date"
-				fi
-			fi
-		fi
-		
-		# Videos
-		if [ "$mp4" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
-				mv "${files[i]}" ../Trash/Small/
-			else
-				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
-					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.mp4" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" ../Trash/Duplicates/
-				else
-					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.mp4" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
-				fi
-			fi
-		fi
-		
-		if [ "$xmsasf" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
-				mv "${files[i]}" ../Trash/Small/
-			else
-				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
-					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.wmv" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" ../Trash/Duplicates/
-				else
-					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.wmv" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
-				fi
-			fi
-		fi
-		
-		if [ "$xmsvideo" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
-				mv "${files[i]}" ../Trash/Small/
-			else
-				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
-					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.avi" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" ../Trash/Duplicates/
-				else
-					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.avi" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
-				fi
-			fi
-		fi
-		
-		if [ "$quicktime" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
-				mv "${files[i]}" ../Trash/Small/
-			else
-				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
-					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.mov" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" ../Trash/Duplicates/
-				else
-					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.mov" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
-				fi
-			fi
-		fi
-		
-		if [ "$xmatroska" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
-				mv "${files[i]}" ../Trash/Small/
-			else
-				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
-					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.mkv" '-filename<DateTimeOriginal' "${files[i]}"
-					mv "${files[i]}" ../Trash/Duplicates/
-				else
-					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.mkv" '-filename<DateTimeOriginal' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
-				fi
-			fi
-		fi
-		
-		if [ "$GP3" = true ]; then
-			if [ "$(stat -c %s "${files[i]}")" -le 20000 ]; then
-				mv "${files[i]}" ../Trash/Small/
-			else
-				checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
-				if grep $checksum sha256sum.txt; then
-					echo "Warning: File already exists"
-					exiftool -api largefilesupport=1 -d "../Trash/Duplicates/%Y-%m-%d_%H-%M-%S%%-c.3gp" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" ../Trash/Duplicates/
-				else
-					echo $checksum >> sha256sum.txt
-					exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.3gp" '-filename<CreateDate' "${files[i]}"
-					mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
+					case `file --mime-type -b "${files[i]}"` in
+						"image/jpeg") 
+							jpegoptim -t "${files[i]}"
+							checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
+							echo $checksum >> sha256sum.txt
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Pictures/%Y/%Y-%m-%d_%H-%M-%S%%-c.jpg" '-filename<CreateDate' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Pictures/Unknown Date"
+							;;
+						"image/png")
+							optipng -o7 "${files[i]}"
+							checksum=`sha256sum "${files[i]}" | cut -d' ' -f1`
+							echo $checksum >> sha256sum.txt
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Pictures/%Y/%Y-%m-%d_%H-%M-%S%%-c.png" '-filename<CreateDate' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Pictures/Unknown Date"
+							;;
+						"image/heic")
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Pictures/%Y/%Y-%m-%d_%H-%M-%S%%-c.heic" '-filename<CreateDate' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Pictures/Unknown Date"
+							;;
+						"video/mp4")
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.mp4" '-filename<CreateDate' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
+							;;
+						"video/x-ms-asf")
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.wmv" '-filename<CreateDate' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
+							;;
+						"video/x-msvideo")
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.avi" '-filename<CreateDate' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
+							;;
+						"video/quicktime")
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.mov" '-filename<CreateDate' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
+							;;
+						"video/x-matroska")
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.mkv" '-filename<DateTimeOriginal' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
+							;;
+						"video/3gpp") GP3=true
+							exiftool -api largefilesupport=1 -d "$outpath/Pictures&Videos/Family Videos/%Y/%Y-%m-%d_%H-%M-%S%%-c.3gp" '-filename<CreateDate' "${files[i]}"
+							mv "${files[i]}" "$outpath/Pictures&Videos/Family Videos/Unknown Date"
+							;;
+					esac
+					
 				fi
 			fi
 		fi
 	done
-	sleep 10m
+	sleep 1m
 done
 } >> pictureVideoSort.log
