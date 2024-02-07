@@ -1,0 +1,76 @@
+#!/bin/bash
+
+failed=false
+log="TranscribeToSRT`date +%Y-%m-%d_%H-%M-%S`.log"
+
+
+
+selected_inference=$(zenity --question --text "Do you want GPU inference? (If you don't know what this means select \"No\")" --title="Select an option" && echo "yes")
+if [ $selected_inference == "yes" ]; then
+	selected_inference="" # Normally this would be "-fw" for faster whisper. However vad cannot be used with faster whisper because for some reason the audio is transcribed first then vad is used. Must be a bug.
+else
+	selected_inference="-dq"
+fi
+
+options=("FALSE" "Tiny.en" "Fastest, worst quality, English model" "FALSE" "Base.en" "Faster, worse quality, English model" "FALSE" "Small.en" "Slow, okay quality, English model" "FALSE" "Medium" "Slower, good quality, English model" "TRUE" "Large-v2" "Slowest, best quality")
+selected_model=$(zenity --list --title="Select an option" --column="Select" --radiolist --column="Options" --column="Description" "${options[@]}")
+
+options=("FALSE" "JSON" "TRUE" "SRT" "FALSE" "TSV" "FALSE" "TXT" "FALSE" "VTT")
+selected_output=$(zenity --list --title="Select an option" --column="Select" --checklist --column="Options" "${options[@]}")
+selected_output="`echo ${selected_output,,} | sed 's/|/,/g'`"
+
+options=("TRUE" "Segment Level Time Stamps" "TRUE" "Word Level Time Stamps")
+selected_timestamp=$(zenity --list --title="Select an option" --column="Select" --checklist --column="Options" "${options[@]}")
+if [ "${selected_timestamp%|*}" != "Segment Level Time Stamps" ]; then
+	segment_level="--segment_level false"
+elif [ "${selected_timestamp##*|}" != "Word Level Time Stamps" ]; then
+	word_level="--word_level false"
+fi
+
+if [ $? != 0 ]; then
+	zenity --info --title="Canceled" --text="Operation canceled by the user."
+	exit
+fi
+
+selected_embed=$(zenity --question --text "Do you want subtitles embedded in videos?" --title="Select an option" && echo "yes" || echo "no")
+
+
+
+{
+echo "List of files to be transcribed:"
+echo -n "$NAUTILUS_SCRIPT_SELECTED_URIS"
+
+IFS=$'\n' read -r -d '' -a files <<< "$NAUTILUS_SCRIPT_SELECTED_URIS"
+for input_file in "${files[@]}"; do
+	echo -e "\n$input_file"
+	file="`basename "$input_file" | sed 's/%20/ /g'`"
+	file_extension="${file##*.}"
+	file_name="${file%.*}"
+	
+	if [ `file --mime-type -b "$file" | cut -d'/' -f1` == "audio" ] || [ `file --mime-type -b "$file" | cut -d'/' -f1` == "video" ] && [ $selected_embed == "no" ]; then
+		stable-ts --model ${selected_model,,} "$file" --vad true --refine --output_format "$selected_output" $selected_inference $segment_level $word_level
+	fi || \
+	failed=true
+	
+	if [ $selected_embed == "yes" ] && [ `file --mime-type -b "$file" | cut -d'/' -f1` == "video" ]; then
+		stable-ts --model ${selected_model,,} "$file" --vad true --refine --output_format "$selected_output" $selected_inference $segment_level $word_level && \
+		
+		if [ `file --mime-type -b "$file"` == "video/mp4" ] || [ `file --mime-type -b "$file"` == "video/quicktime" ]; then
+			MP4Box -add "$file_name.srt":disabled  "$file" -out "$file_name-subtitle.$file_extension" && \
+			rm "$file" && \
+			mv "$file_name-subtitle.$file_extension" "$file"
+			
+		else
+			ffmpeg -i "$file" -i "$file_name.srt" -map 0 -map 1 -default_mode infer_no_subs -c copy -map_metadata 0 -disposition:s 0 "$file_name-subtitle.$file_extension" && \
+			rm "$file" && \
+			mv "$file_name-subtitle.$file_extension" "$file"
+		fi
+	fi || \
+	failed=true
+done
+} > $log 2>&1
+
+if [[ $failed == false ]]; then
+	rm $log
+	notify-send "Completed" "The transcription has completed"
+fi
